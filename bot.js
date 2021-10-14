@@ -32,9 +32,9 @@ async function createVotingSession(id){
   const result = await SchematicSchema.findOne({_id:id});
   if(result) {
     const currTime = new Date().getTime()
-    const endTime = new Date(currTime + 10000)//86400000)
+    const endTime = new Date(currTime + 20000)//86400000)
 
-    const schematicEmbed = new SchematicEmbed(result)
+    let schematicEmbed = new SchematicEmbed(result)
     await votingChannel.send(schematicEmbed.embed())
 
     const votingMessage = await votingChannel.send(VOTING_EMBEDS.START(endTime.toUTCString()))
@@ -53,6 +53,8 @@ async function createVotingSession(id){
     setTimeout(function(){
       endVoting(rsss)
     }, rsss.endTime - (new Date().getTime()))
+
+    await votingMessage.edit(VOTING_EMBEDS.START(endTime.toUTCString()).setFooter(rsss._id.toString()))
 
     return rsss._id.toString()
   } else return null
@@ -73,6 +75,8 @@ client.once('ready', async () => {
 async function endVoting(c){
   const message = await votingChannel.messages.fetch(c.votingMessageID)
   if(!message) return false
+  const remoteData = await ReviewSchematicSchema.findOne({_id: c._id})
+  if(remoteData != "currently_voting_on") return false
   const upVoteUsers = await message.reactions.resolve('👍').users.fetch()
   const downVoteUsers= await message.reactions.resolve('👎').users.fetch()
   let upVoteUserIDs = upVoteUsers.map(u => u.id)
@@ -97,7 +101,12 @@ client.on('message', async message => {
   const args = message.content.slice("???".length).split(/ +/);
   const cmd = args.shift().toLowerCase();
 
-  if(cmd == "end"){ message.channel.send('hi') }
+  if(cmd == "end"){ 
+    const c = currentlyActive.find(c => c._id == args[0])
+    if(!c) return
+    console.log(c)
+    endVoting(c)
+  }
 })
 
 client.login(process.env.DISCORD_CLIENT_TOKEN)
@@ -114,6 +123,23 @@ class SchematicEmbed {
     embed.attachFiles([imageAttachment])
     embed.setImage('attachment://schematic.png')
     embed.setFooter(`Created by ${this.schematic.creator}`)
+    return embed;
+  }
+}
+
+class SchematicEmbedD {
+  constructor(schematic, rid){
+    this.schematic = schematic
+    this.rid = rid
+  }
+  embed(){
+    const imageAttachment = new MessageAttachment(this.schematic.image.Data, `schematic.png`)
+    const embed = new MessageEmbed()
+    embed.setTitle(this.schematic.name)
+    embed.setColor('NAVY')
+    embed.attachFiles([imageAttachment])
+    embed.setImage('attachment://schematic.png')
+    embed.setFooter(`Created by ${this.schematic.creator} • ${this.rid}`)
     return embed;
   }
 }
