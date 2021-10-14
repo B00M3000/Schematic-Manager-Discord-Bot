@@ -9,5 +9,5 @@ mongo().then(() => {
 
 server.on('new', async id => {
   const result = await bot.createVotingSession(id)
-  console.log(result)
+  server.emit('new:'+id, result)
 })

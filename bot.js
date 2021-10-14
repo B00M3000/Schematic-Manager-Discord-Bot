@@ -16,11 +16,11 @@ const VOTING_EMBEDS = {
   START: function(endTimeString){
     return new MessageEmbed()
       .setTitle("Vote for the Schematic Above!")
-      .setDescription(`Click the thumbs up if you approve of the schematic. Click the thumbs down if you disprove the schematic. Your votes will be discarded if you vote twice. \n\n Voting Ends: ${endTimeString}`)
+      .setDescription(`Click the thumbs up if you approve of the schematic. Click the thumbs down if you disprove the schematic. Your votes will be discarded if you vote twice. \n\n Voting Ends: ${endTimeString}, which is also 24 hours from the time this message is sent.`)
       .setColor('GREEN')
   },
   END: function(endTime, u, d){
-    const r = u >= d
+    const r = u > d
     return new MessageEmbed()
       .setTitle(r ? "The schematic above was approved" : "The schematic above was declined")
       .setDescription(`The voting for this schematic ended ${endTime}. The final results were ${u} up votes, ${d} down votes`)
@@ -58,10 +58,6 @@ async function createVotingSession(id){
   } else return null
 }
 
-// client.on('messageReactionAdd', async (reaction, user) => {
-//   reaction.message.channel.send('recived')
-// })
-
 client.once('ready', async () => {
 	console.log(`Logged in as ${client.user.tag}`);
   votingChannel = client.channels.cache.get(votingChannelID)
@@ -81,20 +77,18 @@ async function endVoting(c){
   const downVoteUsers= await message.reactions.resolve('👎').users.fetch()
   let upVoteUserIDs = upVoteUsers.map(u => u.id)
   let downVoteUserIDs = downVoteUsers.map(u => u.id)
+  let duplicates = 1;
   upVoteUserIDs = upVoteUserIDs.filter(val => {
-    const index = downVoteUserIDs.indexOf(val)
-    if(index != -1){
-      downVoteUserIDs = downVoteUserIDs.splice(index, 1)
-      return true
-    } else false
+    if(downVoteUserIDs.indexOf(val)) duplicates++;
+    return true;
   });
 
-  const upvotes = upVoteUserIDs.length - 1
-  const downvotes = downVoteUserIDs.length - 1
+  const upvotes = upVoteUserIDs.length - duplicates
+  const downvotes = downVoteUserIDs.length - duplicates
   
   await message.edit(VOTING_EMBEDS.END(new Date(c.endTime).toUTCString(), upvotes, downvotes))
 
-  ReviewSchematicSchema.findOneAndUpdate({_id: c._id}, {status: upvotes >= downvotes ? "approved" : "declined", resultUp: upvotes, resultDown: downvotes})
+  ReviewSchematicSchema.findOneAndUpdate({_id: c._id}, {status: upvotes > downvotes ? "approved" : "declined", resultUp: upvotes, resultDown: downvotes}, {new: true})
 }
 
 client.on('message', async message => {
