@@ -9,12 +9,22 @@ const configs = require('./config.json')
 const votingChannelID = configs.votingChannelID
 let votingChannel;
 
+
+let currentlyActive; 
+
 const VOTING_EMBEDS = {
   START: function(endTimeString){
     return new MessageEmbed()
       .setTitle("Vote for the Schematic Above!")
-      .setDescription(`Click the thumbs up if you approve of the schematic. Click the thumbs down if you disprove the schematic. \n\n Voting Ends: ${endTimeString}`)
+      .setDescription(`Click the thumbs up if you approve of the schematic. Click the thumbs down if you disprove the schematic. Your votes will be discarded if you vote twice. \n\n Voting Ends: ${endTimeString}`)
       .setColor('GREEN')
+  },
+  END: function(endTime, u, d){
+    const r = u >= d
+    return new MessageEmbed()
+      .setTitle(r ? "The schematic above was approved" : "The schematic above was declined")
+      .setDescription(`The voting for this schematic ended ${endTime}. The final results were ${u} up votes, ${d} down votes`)
+      .setColor(r ? 'GREEN' : 'RED')
   }
 }
 
@@ -22,7 +32,7 @@ async function createVotingSession(id){
   const result = await SchematicSchema.findOne({_id:id});
   if(result) {
     const currTime = new Date().getTime()
-    const endTime = new Date(currTime + 86400000)
+    const endTime = new Date(currTime + 10000)//86400000)
 
     const schematicEmbed = new SchematicEmbed(result)
     await votingChannel.send(schematicEmbed.embed())
@@ -36,7 +46,13 @@ async function createVotingSession(id){
       votingMessageID: votingMessage.id
     })
 
-    const rsss = await ReviewSchematicSchema.findOneAndUpdate(rss, { upsert: true })
+    const rsss = await ReviewSchematicSchema.findOneAndUpdate({status: "non-existant"}, rss, { upsert: true, new: true })    
+
+    currentlyActive.push(rsss)
+
+    setTimeout(function(){
+      endVoting(rsss)
+    }, rsss.endTime - (new Date().getTime()))
 
     return rsss._id.toString()
   } else return null
@@ -49,12 +65,37 @@ async function createVotingSession(id){
 client.once('ready', async () => {
 	console.log(`Logged in as ${client.user.tag}`);
   votingChannel = client.channels.cache.get(votingChannelID)
-  // const all = await ReviewSchematicSchema.find({})
-  // console.log(all)
-  // all.forEach(async r => {
-  //   votingChannel.messages.fetch(r.votingChannelID, true)
-  // })
+  currentlyActive = await ReviewSchematicSchema.find({status: "currently_voting_on"})
+  currentlyActive.forEach(c => {
+    if(c.endTime < new Date().getTime()) endVoting(c)
+    setTimeout(function(){
+      endVoting(c)
+    }, c.endTime - (new Date().getTime()))
+  })
 });
+
+async function endVoting(c){
+  const message = await votingChannel.messages.fetch(c.votingMessageID)
+  if(!message) return false
+  const upVoteUsers = await message.reactions.resolve('👍').users.fetch()
+  const downVoteUsers= await message.reactions.resolve('👎').users.fetch()
+  let upVoteUserIDs = upVoteUsers.map(u => u.id)
+  let downVoteUserIDs = downVoteUsers.map(u => u.id)
+  upVoteUserIDs = upVoteUserIDs.filter(val => {
+    const index = downVoteUserIDs.indexOf(val)
+    if(index != -1){
+      downVoteUserIDs = downVoteUserIDs.splice(index, 1)
+      return true
+    } else false
+  });
+
+  const upvotes = upVoteUserIDs.length - 1
+  const downvotes = downVoteUserIDs.length - 1
+  
+  await message.edit(VOTING_EMBEDS.END(new Date(c.endTime).toUTCString(), upvotes, downvotes))
+
+  ReviewSchematicSchema.findOneAndUpdate({_id: c._id}, {status: upvotes >= downvotes ? "approved" : "declined", resultUp: upvotes, resultDown: downvotes})
+}
 
 client.on('message', async message => {
   if(message.author.bot || !message.guild) return; 
