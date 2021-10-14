@@ -23,11 +23,9 @@ app.get('/', async (req, res) => {
   if(!req.query || !req.query.id){
     const all = await ReviewSchematicSchema.find()
     res.send(all)
-    console.log('all')
   } else {
     const result = await ReviewSchematicSchema.find({_id:req.query.id})
     res.send(result)
-    console.log('single')
   }
 })
 

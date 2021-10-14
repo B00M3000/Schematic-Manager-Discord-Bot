@@ -52,7 +52,7 @@ async function createVotingSession(id){
 
     setTimeout(function(){
       endVoting(rsss)
-    }, rsss.endTime - (new Date().getTime()))
+    }, endTime - (new Date().getTime()))
 
     await votingMessage.edit(VOTING_EMBEDS.START(endTime.toUTCString()).setFooter(rsss._id.toString()))
 
@@ -104,7 +104,6 @@ client.on('message', async message => {
   if(cmd == "end"){ 
     const c = currentlyActive.find(c => c._id == args[0])
     if(!c) return
-    console.log(c)
     endVoting(c)
   }
 })
