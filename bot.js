@@ -52,7 +52,7 @@ async function createVotingSession(id){
 
     setTimeout(function(){
       endVoting(rsss)
-    }, endTime - (new Date().getTime()))
+    }, endTime - new Date().getTime())
 
     await votingMessage.edit(VOTING_EMBEDS.START(endTime.toUTCString()).setFooter(rsss._id.toString()))
 
@@ -76,14 +76,14 @@ async function endVoting(c){
   const message = await votingChannel.messages.fetch(c.votingMessageID)
   if(!message) return false
   const remoteData = await ReviewSchematicSchema.findOne({_id: c._id})
-  if(remoteData != "currently_voting_on") return false
+  if(remoteData.status != "currently_voting_on") return false
   const upVoteUsers = await message.reactions.resolve('👍').users.fetch()
   const downVoteUsers= await message.reactions.resolve('👎').users.fetch()
   let upVoteUserIDs = upVoteUsers.map(u => u.id)
   let downVoteUserIDs = downVoteUsers.map(u => u.id)
-  let duplicates = 1;
+  let duplicates = 0;
   upVoteUserIDs = upVoteUserIDs.filter(val => {
-    if(downVoteUserIDs.indexOf(val)) duplicates++;
+    if(downVoteUserIDs.includes(val)) duplicates++;
     return true;
   });
 
@@ -92,7 +92,8 @@ async function endVoting(c){
   
   await message.edit(VOTING_EMBEDS.END(new Date(c.endTime).toUTCString(), upvotes, downvotes))
 
-  ReviewSchematicSchema.findOneAndUpdate({_id: c._id}, {status: upvotes > downvotes ? "approved" : "declined", resultUp: upvotes, resultDown: downvotes}, {new: true})
+  const updateSucessful = await ReviewSchematicSchema.findOneAndUpdate({_id: c._id}, {status: upvotes > downvotes ? "approved" : "declined", resultUp: upvotes, resultDown: downvotes}, {new: true})
+  console.log(updateSucessful)
 }
 
 client.on('message', async message => {
@@ -103,8 +104,12 @@ client.on('message', async message => {
 
   if(cmd == "end"){ 
     const c = currentlyActive.find(c => c._id == args[0])
-    if(!c) return
+    if(!c) return message.channel.send("Invalid Voting Session ID")
     endVoting(c)
+  } else if(cmd == "start") {
+    const response = await createVotingSession(args[0])
+    if(response === null) return message.channel.send("Invalid Schematic ID")
+    message.channel.send(response)
   }
 })
 
